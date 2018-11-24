@@ -1,0 +1,94 @@
+service: sms-calendar
+
+frameworkVersion: ">=1.1.0 <2.0.0"
+
+custom:
+  CAL_CLIENT_ID:
+    dev: ${ssm:DEV_CAL_CLIENT_ID}
+  CAL_CLIENT_SECRET:
+    dev: ${ssm:DEV_CAL_CLIENT_SECRET}
+  CAL_REDIRECT_URI:
+    dev: ${ssm:DEV_CAL_REDIRECT_URI}
+
+provider:
+  name: aws
+  runtime: nodejs8.10
+  environment:
+    DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
+    CAL_CLIENT_ID: ${self:custom.CAL_CLIENT_ID.${self:provider.stage}}
+    CAL_CLIENT_SECRET: ${self:custom.CAL_CLIENT_SECRET.${self:provider.stage}}
+    CAL_REDIRECT_URI: ${self:custom.CAL_REDIRECT_URI.${self:provider.stage}}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}"
+
+functions:
+  inboundPost:
+    handler: sms/inboundPost.inboundPost
+    events:
+      - http:
+          path: /webhooks/inbound-sms
+          method: post
+          cors: true
+
+  # list:
+  #   handler: todos/list.list
+  #   events:
+  #     - http:
+  #         path: todos
+  #         method: get
+  #         cors: true
+
+  inboundGet:
+    handler: sms/inboundGet.inboundGet
+    events:
+      - http:
+          path: /webhooks/inbound-sms
+          method: get
+          cors: true
+
+  auth:
+    handler: auth/oauth.oauth
+    events:
+      - http:
+          path: /oauthcallback
+          method: get
+          cors: true
+
+  # delete:
+  #   handler: todos/delete.delete
+  #   events:
+  #     - http:
+  #         path: todos/{id}
+  #         method: delete
+  #         cors: true
+
+resources:
+  Resources:
+    TodosDynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: id
+            AttributeType: S
+        KeySchema:
+          -
+            AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
+
+package:
+  exclude:
+    - NOTES.md
